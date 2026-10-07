@@ -9,7 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@auth/core": "^0.41.3",
     "@supabase/supabase-js": "^2.117.3",
+    "better-sqlite3": "^13.0.3",
     "next": "16.4.0",
     "next-auth": "^5.0.0-beta.32",
     "react": "19.3.0",
@@ -17,6 +19,7 @@
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
