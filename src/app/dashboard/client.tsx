@@ -15,7 +15,7 @@ export default function DashboardClient({ userName, stats }: { userName: string;
   const [sites, setSites] = useState<Site[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [keys, setKeys] = useState<Record<string, boolean>>({});
-  const [msg, setMsg] = useState("");
+  const [msg, setMsg] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
   const [siteName, setSiteName] = useState(""); const [siteUrl, setSiteUrl] = useState("");
@@ -50,19 +50,19 @@ export default function DashboardClient({ userName, stats }: { userName: string;
   useEffect(() => { loadAll(); }, []);
 
   const addSite = async () => {
-    setMsg(""); setLoading(true);
+    setMsg({ kind: "info", text: "Connexion en cours…" }); setLoading(true);
     const r = await fetch("/api/sites", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: siteName, url: siteUrl, wp_user: siteUser, wp_app_password: sitePass, gsc_property: siteGsc }) });
     const j = await r.json();
-    if (!r.ok) { setMsg("❌ " + (j.error || "Erreur")); setLoading(false); return; }
-    setMsg(j.test?.ok ? `✅ ${siteName} connecté (WordPress : ${j.test.user})` : "✅ Site enregistré");
+    if (!r.ok) { setMsg({ kind: "err", text: "❌ " + (j.error || "Erreur") }); setLoading(false); return; }
+    setMsg(j.test?.ok ? { kind: "ok", text: `✅ ${siteName} connecté (WordPress : ${j.test.user})` } : { kind: "ok", text: "✅ Site enregistré (sans test WP)" });
     setSiteName(""); setSiteUrl(""); setSiteUser(""); setSitePass(""); setSiteGsc("");
     setLoading(false);
     loadAll();
   };
   const testSite = async (id: number) => {
-    setMsg("");
+    setMsg(null);
     const j = await (await fetch("/api/sites", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) })).json();
-    setMsg(j.ok ? `✅ Connecté en tant que ${j.user}` : "❌ " + (j.error || "Échec"));
+    setMsg(j.ok ? { kind: "ok", text: `✅ Connecté en tant que ${j.user}` } : { kind: "err", text: "❌ " + (j.error || "Échec") });
   };
   const delSite = async (id: number) => {
     if (!confirm("Supprimer ce site ?")) return;
@@ -70,11 +70,11 @@ export default function DashboardClient({ userName, stats }: { userName: string;
     loadAll();
   };
   const generateArticle = async () => {
-    setMsg(""); setGenResult("");
+    setMsg(null); setGenResult("");
     const r = await fetch("/api/articles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: artTopic, keywords: artKw, site_id: Number(artSite), brief: artBrief, publish: artPublish, source: "ai" }) });
     const j = await r.json();
-    if (!r.ok) { setMsg("❌ " + (j.error || "Erreur")); return; }
-    setMsg(j.wp_post_id ? `✅ Article ${artPublish ? "publié" : "en brouillon"} ! WP #${j.wp_post_id}` : "⚠️ Généré mais publication échouée");
+    if (!r.ok) { setMsg({ kind: "err", text: "❌ " + (j.error || "Erreur") }); return; }
+    setMsg(j.wp_post_id ? { kind: "ok", text: `✅ Article ${artPublish ? "publié" : "en brouillon"} ! WP #${j.wp_post_id}` } : { kind: "info", text: "⚠️ Généré mais publication échouée (code " + j.wp_status + ")" });
     setGenResult(j.article?.content?.slice(0, 400) + "…");
     loadAll();
   };
@@ -84,9 +84,9 @@ export default function DashboardClient({ userName, stats }: { userName: string;
     loadAll();
   };
   const saveKey = async (key_name: string, key_value: string) => {
-    if (!key_value.trim()) { setMsg("❌ Collez d'abord la clé"); return; }
+    if (!key_value.trim()) { setMsg({ kind: "err", text: "❌ Collez d'abord la clé" }); return; }
     await fetch("/api/keys", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key_name, key_value }) });
-    setMsg(`✅ Clé ${key_name === "gsc_service_account" ? "GSC" : "Bing"} enregistrée`);
+    setMsg({ kind: "ok", text: `✅ Clé ${key_name === "gsc_service_account" ? "GSC" : "Bing"} enregistrée` });
     setGscKey(""); setBingKey("");
     loadAll();
   };
@@ -146,8 +146,12 @@ export default function DashboardClient({ userName, stats }: { userName: string;
         </div>
 
         {msg && (
-          <Card3D className="p-4 mb-7 text-sm" glow={msg.startsWith("✅") ? "16,185,129" : "239,68,68"}>
-            {msg}
+          <Card3D className="p-4 mb-7 text-sm" glow={msg.kind === "ok" ? "16,185,129" : msg.kind === "err" ? "239,68,22" : "139,92,246"}>
+            <div className="flex items-center gap-3">
+              <span style={{fontSize:18}}>{msg.kind === "ok" ? "✅" : msg.kind === "err" ? "❌" : "ℹ️"}</span>
+              <span className="flex-1">{msg.text}</span>
+              <button onClick={() => setMsg(null)} className="text-xs opacity-60 hover:opacity-100 cursor-pointer px-2">✕</button>
+            </div>
           </Card3D>
         )}
 
