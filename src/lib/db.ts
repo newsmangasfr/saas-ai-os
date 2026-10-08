@@ -99,8 +99,16 @@ export function wpRequest(
 }
 
 export async function testWpSite(site: { url: string; wp_user: string | null; wp_app_password: string | null }) {
-  const { status, data } = await wpRequest(site, "GET", "users/me?context=edit");
-  if (status === 200) return { ok: true, user: data.name as string };
+  // NOTE: /users/me est bloqué par le WAF LiteSpeed de certains hébergeurs (403 même avec auth valide).
+  // Contournement : POST /posts avec title vide → 401 si identifiants invalides, 400 (données invalides) si identifiants valides.
+  const { status, data } = await wpRequest(site, "POST", "posts", { title: "" });
+  if (status === 400) {
+    // 400 = authentifié mais données invalides → identifiants VALIDES
+    return { ok: true, user: site.wp_user || "" };
+  }
+  if (status === 401 || status === 403) {
+    return { ok: false, error: "Identifiants WordPress invalides (ou utilisateur sans droits de publication)" };
+  }
   return { ok: false, error: (data.message as string) || `HTTP ${status}` };
 }
 
