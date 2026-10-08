@@ -80,7 +80,7 @@ export function verifyPassword(password: string, stored: string): boolean {
 }
 
 /* ---------- WordPress REST ---------- */
-export function wpRequest(
+export async function wpRequest(
   site: { url: string; wp_user: string | null; wp_app_password: string | null },
   method: string,
   path: string,
@@ -88,14 +88,29 @@ export function wpRequest(
 ): Promise<{ status: number; data: Record<string, unknown> }> {
   const base = site.url.replace(/\/$/, "");
   const auth = Buffer.from(`${site.wp_user}:${site.wp_app_password}`).toString("base64");
-  return fetch(`${base}/wp-json/wp/v2/${path}`, {
-    method,
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/json",
-    },
-    body: data ? JSON.stringify(data) : undefined,
-  }).then(async (r) => ({ status: r.status, data: (await r.json().catch(() => ({}))) as Record<string, unknown> }));
+  // Timeout 12s : le WAF LiteSpeed tarpit parfois les requêtes Node sans UA → ne jamais pendre indéfiniment
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const r = await fetch(`${base}/wp-json/wp/v2/${path}`, {
+      method,
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; AI-Agents-OS/1.0; +https://ai-agents-os.wp1.host)",
+      },
+      body: data ? JSON.stringify(data) : undefined,
+      signal: controller.signal,
+      redirect: "follow",
+    });
+    const json = await r.json().catch(() => ({}));
+    return { status: r.status, data: json as Record<string, unknown> };
+  } catch (e) {
+    const isTimeout = e instanceof Error && e.name === "AbortError";
+    return { status: isTimeout ? 504 : 0, data: { message: isTimeout ? "Timeout : newsmangas.com n'a pas répondu en 12s (WAF/pare-feu ?)" : `Erreur réseau : ${(e as Error).message}` } };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function testWpSite(site: { url: string; wp_user: string | null; wp_app_password: string | null }) {
@@ -105,6 +120,12 @@ export async function testWpSite(site: { url: string; wp_user: string | null; wp
   if (status === 400) {
     // 400 = authentifié mais données invalides → identifiants VALIDES
     return { ok: true, user: site.wp_user || "" };
+  }
+  if (status === 504) {
+    return { ok: false, error: "Timeout : le site WordPress n'a pas répondu en 12 s. Vérifiez que l'URL est correcte et que le WAF ne bloque pas le serveur." };
+  }
+  if (status === 0) {
+    return { ok: false, error: (data.message as string) || "Erreur réseau" };
   }
   if (status === 401 || status === 403) {
     return { ok: false, error: "Identifiants WordPress invalides (ou utilisateur sans droits de publication)" };
