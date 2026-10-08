@@ -1,17 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Logo } from "@/components/fx";
 
 export default function Login() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [loading, setLoading] = useState(false);
+  const [csrf, setCsrf] = useState("");
+  const [error, setError] = useState("");
 
-  async function handleRegister(e: React.MouseEvent) {
-    e.preventDefault();
+  // Charger le csrf token au montage (requis par NextAuth pour le POST form)
+  useEffect(() => {
+    fetch("/api/auth/csrf")
+      .then((r) => r.json())
+      .then((j) => setCsrf(j.csrfToken));
+  }, []);
+
+  async function handleRegister() {
     const regForm = document.getElementById("registerFields") as unknown as HTMLFormElement;
     const fd = new FormData(regForm);
     setLoading(true);
+    setError("");
     try {
       const r = await fetch("/api/register", {
         method: "POST",
@@ -24,7 +33,7 @@ export default function Login() {
       });
       const j = await r.json();
       if (!r.ok) {
-        alert(j.error || "Erreur d'inscription");
+        setError(j.error || "Erreur d'inscription");
         setLoading(false);
         return;
       }
@@ -32,7 +41,7 @@ export default function Login() {
       const loginForm = document.getElementById("nativeLoginForm") as unknown as HTMLFormElement;
       loginForm.submit();
     } catch {
-      alert("Erreur réseau");
+      setError("Erreur réseau");
       setLoading(false);
     }
   }
@@ -53,12 +62,15 @@ export default function Login() {
             : "8+ caractères pour le mot de passe"}
         </p>
 
-        {/* Formulaire NATIF — POST navigateur vers NextAuth, zéro fetch, zéro problème de cookies */}
+        {error && <p className="text-red-500 text-[13px] mb-4">{error}</p>}
+
+        {/* Formulaire NATIF — POST navigateur vers NextAuth, zéro fetch, cookies gérés par le navigateur */}
         <form
           id="nativeLoginForm"
           method="post"
           action="/api/auth/callback/credentials"
         >
+          <input type="hidden" name="csrfToken" value={csrf} />
           {mode === "register" && (
             <div id="registerFields" className="mb-4">
               <input name="name" placeholder="Votre nom" className={inputCls} />
@@ -76,31 +88,19 @@ export default function Login() {
               className={inputCls}
             />
           </div>
-          {mode === "login" && (
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary-neon w-full justify-center py-3 rounded-xl font-semibold text-sm disabled:opacity-50 border-0 cursor-pointer"
-            >
-              {loading ? "…" : "Se connecter"}
-            </button>
-          )}
-        </form>
-
-        {mode === "register" && (
           <button
-            onClick={handleRegister}
-            disabled={loading}
+            type="submit"
+            disabled={loading || !csrf}
             className="btn-primary-neon w-full justify-center py-3 rounded-xl font-semibold text-sm disabled:opacity-50 border-0 cursor-pointer"
           >
-            {loading ? "…" : "Créer mon compte"}
+            {loading ? "…" : mode === "login" ? "Se connecter" : "Créer mon compte"}
           </button>
-        )}
+        </form>
 
         <p
           className="text-center text-[13px] mt-5 cursor-pointer"
           style={{ color: "var(--text-secondary)" }}
-          onClick={() => setMode(mode === "login" ? "register" : "login")}
+          onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}
         >
           {mode === "login" ? "Pas de compte ? S'inscrire" : "Déjà un compte ? Se connecter"}
         </p>
