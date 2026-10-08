@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BarChart, LineChart, Donut, Sparkline } from "@/components/charts";
 
 type Site = { id: number; name: string; url: string; wp_user: string | null; gsc_property: string | null; bing_site: string | null };
 type Article = { id: number; title: string; status: string; source: string; wp_post_id: number | null; wp_link: string | null; site_name: string | null; created_at: string };
@@ -9,7 +10,7 @@ type Stats = { sites: number; articles: number; published: number; jobs: number 
 const inputCls = "w-full px-3.5 py-2.5 rounded-xl bg-black/30 border border-edge-light text-white text-sm outline-none focus:border-purple";
 
 export default function DashboardClient({ userName, stats }: { userName: string; stats: Stats }) {
-  const [tab, setTab] = useState<"sites" | "articles" | "seo">("sites");
+  const [tab, setTab] = useState<"sites" | "articles" | "seo" | "analytics">("sites");
   const [sites, setSites] = useState<Site[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [keys, setKeys] = useState<Record<string, boolean>>({});
@@ -32,6 +33,25 @@ export default function DashboardClient({ userName, stats }: { userName: string;
   // --- SEO keys
   const [gscKey, setGscKey] = useState("");
   const [bingKey, setBingKey] = useState("");
+
+  // --- GSC Analytics
+  const [gscData, setGscData] = useState<{
+    configured?: boolean; property?: string; error?: string;
+    daily?: { date: string; clicks: number; impressions: number; ctr: number; position: number }[];
+    totals?: { clicks: number; impressions: number; ctr: number; position: number };
+  } | null>(null);
+  const [gscLoading, setGscLoading] = useState(false);
+  const [gscSiteId, setGscSiteId] = useState("");
+
+  const loadGsc = async (sid?: string) => {
+    const id = sid || gscSiteId || String(sites[0]?.id || "");
+    if (!id) return;
+    setGscLoading(true);
+    setGscData(null);
+    const r = await fetch(`/api/gsc?site_id=${id}`);
+    setGscData(await r.json());
+    setGscLoading(false);
+  };
 
   const loadAll = async () => {
     const [s, a, k] = await Promise.all([
@@ -134,9 +154,9 @@ export default function DashboardClient({ userName, stats }: { userName: string;
       </div>
 
       {/* TABS */}
-      <div className="flex gap-2 mb-8">
-        {([["sites", "🌐 Sites WordPress"], ["articles", "✍️ Articles IA"], ["seo", "🔌 SEO (GSC & Bing)"]] as const).map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)}
+      <div className="flex gap-2 mb-8 flex-wrap">
+        {([["sites", "🌐 Sites WordPress"], ["articles", "✍️ Articles IA"], ["seo", "🔌 SEO (GSC & Bing)"], ["analytics", "📈 Analytics"]] as const).map(([k, label]) => (
+          <button key={k} onClick={() => { setTab(k); if (k === "analytics" && sites.length) loadGsc(); }}
             className="px-4 py-2.5 rounded-xl text-sm font-medium transition-all border cursor-pointer"
             style={tab === k
               ? { background: "rgba(139,92,246,.18)", color: "#fff", borderColor: "rgba(139,92,246,.4)" }
@@ -245,6 +265,92 @@ export default function DashboardClient({ userName, stats }: { userName: string;
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ============ ANALYTICS ============ */}
+      {tab === "analytics" && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-lg font-bold">📈 Google Search Console — 28 derniers jours</h2>
+            {sites.length > 0 && (
+              <select className={inputCls + " max-w-56"} value={gscSiteId || String(sites[0]?.id)} onChange={(e) => { setGscSiteId(e.target.value); loadGsc(e.target.value); }}>
+                {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            )}
+          </div>
+
+          {sites.length === 0 && (
+            <div className="glass p-8 text-sm" style={{ color: "var(--text-muted)" }}>
+              Connectez d'abord un site (onglet 🌐 Sites) avec sa property GSC définie.
+            </div>
+          )}
+
+          {gscLoading && <div className="glass p-8 text-sm animate-pulse" style={{ color: "var(--text-muted)" }}>Chargement des données GSC…</div>}
+
+          {gscData && !gscLoading && (
+            <>
+              {!gscData.configured && (
+                <div className="glass p-6 text-sm" style={{ borderColor: "rgba(249,115,22,.3)", color: "var(--accent-orange)" }}>
+                  ⚠️ {gscData.error} — configurez votre clé dans l'onglet 🔌 SEO puis définissez la property GSC du site.
+                </div>
+              )}
+              {gscData.configured && gscData.daily && gscData.totals && (
+                <>
+                  {/* KPI Cards */}
+                  <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                    {[
+                      { n: gscData.totals.clicks, l: "Clics totaux", c: "59,130,246", spark: gscData.daily.map(d => d.clicks) },
+                      { n: gscData.totals.impressions, l: "Impressions", c: "139,92,246", spark: gscData.daily.map(d => d.impressions) },
+                      { n: gscData.totals.ctr + "%", l: "CTR moyen", c: "16,185,129", spark: gscData.daily.map(d => d.ctr) },
+                      { n: gscData.totals.position, l: "Position moy.", c: "249,115,22", spark: gscData.daily.map(d => d.position) },
+                    ].map((s) => (
+                      <div key={s.l} className="glass p-5">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="text-2xl font-bold font-mono">{s.n}</p>
+                            <p className="text-[11px] uppercase tracking-wider mt-1" style={{ color: "var(--text-muted)" }}>{s.l}</p>
+                          </div>
+                          <Sparkline data={s.spark} color={s.c} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Charts */}
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <div className="glass p-6">
+                      <h3 className="text-sm font-semibold mb-4">👆 Clics par jour</h3>
+                      <BarChart data={gscData.daily.map(d => d.clicks)} labels={gscData.daily.map(d => d.date)} color="59,130,246" />
+                    </div>
+                    <div className="glass p-6">
+                      <h3 className="text-sm font-semibold mb-4">👁️ Impressions par jour</h3>
+                      <LineChart data={gscData.daily.map(d => d.impressions)} labels={gscData.daily.filter((_, i) => i % 6 === 0).map(d => d.date)} color="139,92,246" />
+                    </div>
+                    <div className="glass p-6">
+                      <h3 className="text-sm font-semibold mb-4">🎯 CTR quotidien (%)</h3>
+                      <LineChart data={gscData.daily.map(d => d.ctr)} labels={gscData.daily.filter((_, i) => i % 6 === 0).map(d => d.date)} color="16,185,129" />
+                    </div>
+                    <div className="glass p-6 flex items-center justify-around">
+                      <div className="text-center">
+                        <Donut value={gscData.totals.ctr} max={15} label="CTR (vs 15% cible)" color="16,185,129" />
+                      </div>
+                      <div className="text-center">
+                        <Donut value={Math.max(0, 21 - gscData.totals.position)} max={21} label="Position (vs top 3)" color="59,130,246" />
+                      </div>
+                      <div className="text-center">
+                        <Donut value={gscData.totals.clicks} max={Math.max(gscData.totals.clicks * 1.5, 100)} label="Clics (vs objectif)" color="139,92,246" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    Property : <span className="font-mono">{gscData.property}</span> · Source : Google Search Console API v3 · Données à ~48h de délai Google
+                  </p>
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
 
