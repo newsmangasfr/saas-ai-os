@@ -7,9 +7,10 @@ export default function Login() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [loading, setLoading] = useState(false);
 
-  async function handleRegister(e: React.FormEvent<HTMLFormElement>) {
+  async function handleRegister(e: React.MouseEvent) {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+    const regForm = document.getElementById("registerFields") as unknown as HTMLFormElement;
+    const fd = new FormData(regForm);
     setLoading(true);
     try {
       const r = await fetch("/api/register", {
@@ -59,7 +60,7 @@ export default function Login() {
           action="/api/auth/callback/credentials"
         >
           {mode === "register" && (
-            <div className="mb-4">
+            <div id="registerFields" className="mb-4">
               <input name="name" placeholder="Votre nom" className={inputCls} />
             </div>
           )}
