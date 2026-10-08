@@ -16,6 +16,7 @@ export default function DashboardClient({ userName, stats }: { userName: string;
   const [articles, setArticles] = useState<Article[]>([]);
   const [keys, setKeys] = useState<Record<string, boolean>>({});
   const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const [siteName, setSiteName] = useState(""); const [siteUrl, setSiteUrl] = useState("");
   const [siteUser, setSiteUser] = useState(""); const [sitePass, setSitePass] = useState("");
@@ -49,12 +50,13 @@ export default function DashboardClient({ userName, stats }: { userName: string;
   useEffect(() => { loadAll(); }, []);
 
   const addSite = async () => {
-    setMsg("");
+    setMsg(""); setLoading(true);
     const r = await fetch("/api/sites", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: siteName, url: siteUrl, wp_user: siteUser, wp_app_password: sitePass, gsc_property: siteGsc }) });
     const j = await r.json();
-    if (!r.ok) { setMsg("❌ " + (j.error || "Erreur")); return; }
+    if (!r.ok) { setMsg("❌ " + (j.error || "Erreur")); setLoading(false); return; }
     setMsg(j.test?.ok ? `✅ ${siteName} connecté (WordPress : ${j.test.user})` : "✅ Site enregistré");
     setSiteName(""); setSiteUrl(""); setSiteUser(""); setSitePass(""); setSiteGsc("");
+    setLoading(false);
     loadAll();
   };
   const testSite = async (id: number) => {
@@ -163,7 +165,9 @@ export default function DashboardClient({ userName, stats }: { userName: string;
               <input className={inputCls + " mb-3"} placeholder="Utilisateur WordPress" value={siteUser} onChange={e => setSiteUser(e.target.value)} />
               <input className={inputCls + " mb-3"} type="password" placeholder="Mot de passe d'application" value={sitePass} onChange={e => setSitePass(e.target.value)} />
               <input className={inputCls + " mb-5"} placeholder="GSC property (sc-domain:newsmangas.com)" value={siteGsc} onChange={e => setSiteGsc(e.target.value)} />
-              <NeonButton onClick={addSite} full disabled={!siteName || !siteUrl}>🔗 Connecter &amp; vérifier</NeonButton>
+              <NeonButton onClick={addSite} full disabled={!siteName.trim() || !siteUrl.trim() || loading}>
+                {loading ? "⏳ Vérification WordPress…" : (!siteName.trim() || !siteUrl.trim()) ? "Remplissez nom + URL" : "🔗 Connecter & vérifier"}
+              </NeonButton>
             </Card3D>
             <div className="lg:col-span-3 space-y-5">
               {sites.length === 0 && (
