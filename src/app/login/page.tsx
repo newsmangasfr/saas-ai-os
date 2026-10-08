@@ -30,10 +30,16 @@ export default function Login() {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: form,
-        redirect: "manual",
       });
-      if (r2.status === 302 || r2.status === 0 || r2.status === 307) {
-        location.href = "/dashboard";
+      if (r2.ok || r2.redirected || r2.status === 0) {
+        // vérifier que la session est bien posée avant de rediriger
+        const s = await fetch("/api/auth/session");
+        const sj = await s.json();
+        if (sj && sj.user) {
+          location.href = "/dashboard";
+          return;
+        }
+        setError("Connexion établie mais session non persistée — réessayez");
       } else {
         setError("Email ou mot de passe incorrect");
       }
