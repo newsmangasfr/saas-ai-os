@@ -28,7 +28,7 @@ export default function Login() {
         return;
       }
       // inscription OK → soumettre le form de login natif
-      const loginForm = document.getElementById("nativeLoginForm") as HTMLFormElement;
+      const loginForm = document.getElementById("nativeLoginForm") as unknown as HTMLFormElement;
       loginForm.submit();
     } catch {
       alert("Erreur réseau");
